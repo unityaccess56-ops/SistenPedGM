@@ -4,10 +4,17 @@ export const isProduction = NODE_ENV === "production";
 export const isTest = NODE_ENV === "test";
 export const isDevelopment = !isProduction && !isTest;
 
+export const startupWarnings: string[] = [];
+
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
-    throw new Error(`La variable de entorno ${name} es obligatoria`);
+    const msg = `La variable de entorno ${name} es obligatoria`;
+    startupWarnings.push(msg);
+    if (isProduction) {
+      console.warn(`[WARN] ${msg}. Se usara un valor por defecto no seguro, por favor configura ${name} en Render.`);
+    }
+    return `fallback-${name.toLowerCase()}-${Math.random().toString(36).slice(2, 10)}`;
   }
   return value;
 }
@@ -21,7 +28,16 @@ export const JWT_SECRET = isProduction
   : getEnv("JWT_SECRET", "gisselle-dev-secret");
 
 export const DATABASE_URL = isProduction
-  ? requireEnv("DATABASE_URL")
+  ? (() => {
+      const value = process.env.DATABASE_URL?.trim();
+      if (!value) {
+        const msg = "DATABASE_URL es obligatoria en produccion";
+        startupWarnings.push(msg);
+        console.warn(`[WARN] ${msg}. Continuara sin PostgreSQL (solo memoria).`);
+        return "";
+      }
+      return value;
+    })()
   : getEnv("DATABASE_URL");
 
 export const PORT = Number(getEnv("PORT", "3001"));
@@ -30,6 +46,15 @@ export const allowedOrigins = getEnv("CORS_ORIGIN")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+if (isProduction && allowedOrigins.length === 0) {
+  startupWarnings.push(
+    "CORS_ORIGIN no esta configurada. Se permitiran todos los origenes (menos seguro).",
+  );
+  console.warn(
+    "[WARN] CORS_ORIGIN no esta configurada en Render. Se permitiran todos los origenes. Agrega CORS_ORIGIN con el dominio publico para mayor seguridad.",
+  );
+}
 
 export const loginRateLimit = {
   maxAttempts: Number(getEnv("LOGIN_RATE_LIMIT_MAX", "5")),
@@ -44,8 +69,11 @@ export const initialUsers = (() => {
 
   if (isProduction) {
     if (!adminEmail || !adminPassword) {
-      throw new Error(
-        "ADMIN_EMAIL y ADMIN_PASSWORD son obligatorias para iniciar en produccion",
+      const msg =
+        "ADMIN_EMAIL y ADMIN_PASSWORD son obligatorias para iniciar en produccion";
+      startupWarnings.push(msg);
+      console.warn(
+        `[WARN] ${msg}. Se usaran credenciales por defecto. CONFIGURALAS EN RENDER!`,
       );
     }
   }

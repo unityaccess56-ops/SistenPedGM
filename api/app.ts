@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import authRoutes from "./routes/auth.js";
 import clientRoutes from "./routes/clients.js";
-import { allowedOrigins, isProduction } from "./config.js";
+import { allowedOrigins, isProduction, startupWarnings } from "./config.js";
 import { initializeStore } from "./data/store.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import orderRoutes from "./routes/orders.js";
@@ -23,12 +23,38 @@ const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, "../dist");
 const indexHtmlPath = path.join(distPath, "index.html");
 
-await initializeStore();
+const distExists = fs.existsSync(distPath);
+const indexExists = distExists && fs.existsSync(indexHtmlPath);
+
+const storeInitPromise = initializeStore()
+  .then(() => {
+    console.log("[INFO] Store inicializada correctamente.");
+  })
+  .catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    startupWarnings.push(`initializeStore FAILED: ${msg}`);
+    console.error(`[ERROR] initializeStore FAILED: ${msg}`);
+    console.error(
+      "[WARN] La app seguira corriendo, pero las rutas /api/* pueden fallar. Revisa variables de entorno y PostgreSQL.",
+    );
+  });
 
 const app: express.Application = express();
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
+
+app.get("/api/health", (_req: Request, res: Response): void => {
+  void storeInitPromise;
+  res.status(200).json({
+    success: true,
+    message: "ok",
+    distPath,
+    distExists,
+    indexExists,
+    startupWarnings,
+  });
+});
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader("X-Frame-Options", "DENY");
@@ -41,6 +67,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+const permissiveCors = allowedOrigins.length === 0;
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -48,22 +76,24 @@ app.use(
         callback(null, true);
         return;
       }
-
+      if (permissiveCors) {
+        callback(null, true);
+        return;
+      }
       if (!allowedOrigins.length && !isProduction) {
         callback(null, true);
         return;
       }
-
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
         return;
       }
-
-      callback(new Error("Origen no permitido por CORS"));
+      callback(null, false);
     },
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   }),
 );
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -73,14 +103,7 @@ app.use("/api/clientes", clientRoutes);
 app.use("/api/pedidos", orderRoutes);
 app.use("/api/cotizaciones", quotationRoutes);
 
-app.get("/api/health", (_req: Request, res: Response): void => {
-  res.status(200).json({
-    success: true,
-    message: "ok",
-  });
-});
-
-if (fs.existsSync(distPath) && fs.existsSync(indexHtmlPath)) {
+if (distExists) {
   app.use(
     express.static(distPath, {
       index: false,
@@ -94,34 +117,83 @@ if (fs.existsSync(distPath) && fs.existsSync(indexHtmlPath)) {
       },
     }),
   );
+}
 
-  app.get("^/assets/*", (_req: Request, res: Response) => {
-    res.status(404).set("Content-Type", "text/plain").send("Not found");
-  });
+app.get(/^\/assets\/.*/, (_req: Request, res: Response) => {
+  res
+    .status(404)
+    .set("Content-Type", "text/plain; charset=utf-8")
+    .send(`Asset not found. distExists=${distExists} indexExists=${indexExists}`);
+});
 
-  app.get(/^\/(?!api).*/, (_req: Request, res: Response) => {
+app.get(/^\/(?!api).*/, (_req: Request, res: Response) => {
+  if (indexExists) {
     res.sendFile(indexHtmlPath, {
       headers: {
         "Cache-Control": "no-cache",
       },
     });
-  });
-}
+    return;
+  }
+  res
+    .status(200)
+    .set("Content-Type", "text/html; charset=utf-8")
+    .send(
+      `<!doctype html><html><head><meta charset="utf-8"><title>Build pendiente</title></head>` +
+        `<body style="font-family:system-ui;padding:40px;line-height:1.6">` +
+        `<h1>Frontend no construido</h1>` +
+        `<p>No se encontro <code>dist/index.html</code>.</p>` +
+        `<ul>` +
+        `<li>distPath: <code>${distPath}</code> (existe: <b>${distExists}</b>)</li>` +
+        `<li>index.html: <code>${indexHtmlPath}</code> (existe: <b>${indexExists}</b>)</li>` +
+        `</ul>` +
+        `<p>Validar en Render que el build command <code>npm install && npm run build</code> termine sin errores.</p>` +
+        (startupWarnings.length
+          ? `<h2>Advertencias de inicio:</h2><ul>` +
+            startupWarnings.map((w) => `<li>${w}</li>`).join("") +
+            `</ul>`
+          : ``) +
+        `<p>Revisa el <b>health</b>: <a href="/api/health">/api/health</a></p>` +
+        `</body></html>`,
+    );
+});
 
 app.use(
-  (error: Error, _req: Request, res: Response, _next: NextFunction): void => {
-    res.status(500).json({
-      success: false,
-      error: error.message || "Error interno del servidor",
-    });
+  (error: Error, req: Request, res: Response, _next: NextFunction): void => {
+    const msg = error.message || "Error interno del servidor";
+    console.error(`[ERROR] ${req.method} ${req.url} -> ${msg}`);
+    if (req.url.startsWith("/api/")) {
+      res.status(500).json({
+        success: false,
+        error: msg,
+      });
+      return;
+    }
+    res
+      .status(500)
+      .set("Content-Type", "text/plain; charset=utf-8")
+      .send(`Server error: ${msg}`);
   },
 );
 
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    error: "API no encontrada",
-  });
+app.use((req: Request, res: Response) => {
+  if (req.url.startsWith("/api/")) {
+    res.status(404).json({
+      success: false,
+      error: "API no encontrada",
+    });
+    return;
+  }
+  if (indexExists) {
+    res.sendFile(indexHtmlPath, {
+      headers: { "Cache-Control": "no-cache" },
+    });
+    return;
+  }
+  res
+    .status(404)
+    .set("Content-Type", "text/plain; charset=utf-8")
+    .send("Not found");
 });
 
 export default app;

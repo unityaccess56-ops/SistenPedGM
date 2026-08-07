@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "start": "tsx api/server.ts",
+    "start": "node --import tsx/esm api/server.ts",
+    "server:start": "tsx api/server.ts",
     "server:dev": "nodemon",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
   },

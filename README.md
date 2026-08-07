@@ -56,9 +56,18 @@ El backend:
 
 ## Despliegue en Render
 - Puedes usar el archivo `render.yaml`.
-- Crea o conecta una base PostgreSQL en Render.
-- Configura `CORS_ORIGIN` con la URL publica final de tu servicio.
+- Build Command: `npm install && npm run build`
+- Start Command: `npm run start`
+- Health Check Path: `/api/health`
+- Crea o conecta una base PostgreSQL en Render y usa su `connectionString` en `DATABASE_URL`.
+- Configura `CORS_ORIGIN` con la URL publica final de tu servicio (o dejala vacia si usas el mismo dominio).
 - Define `ADMIN_EMAIL`, `ADMIN_PASSWORD` y, si aplica, las credenciales del operador.
+- Verifica en logs que no falten `JWT_SECRET`, `DATABASE_URL` ni credenciales admin.
+
+Si el navegador muestra `Refused to apply style ... MIME type ('application/json')` o fallos en `/assets/*`, el problema comun es:
+- Variables de entorno faltantes que impiden que el servicio arranque bien.
+- `dist` no se construyo correctamente.
+- Revisa primero el endpoint `/api/health` antes de revisar el frontend.
 
 ## Validacion antes de entregar
 ```bash

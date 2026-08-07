@@ -21,6 +21,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, "../dist");
+const indexHtmlPath = path.join(distPath, "index.html");
 
 await initializeStore();
 
@@ -79,11 +80,31 @@ app.get("/api/health", (_req: Request, res: Response): void => {
   });
 });
 
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+if (fs.existsSync(distPath) && fs.existsSync(indexHtmlPath)) {
+  app.use(
+    express.static(distPath, {
+      index: false,
+      dotfiles: "deny",
+      maxAge: isProduction ? "1y" : 0,
+      fallthrough: true,
+      setHeaders(res, filePath) {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        }
+      },
+    }),
+  );
+
+  app.get("^/assets/*", (_req: Request, res: Response) => {
+    res.status(404).set("Content-Type", "text/plain").send("Not found");
+  });
 
   app.get(/^\/(?!api).*/, (_req: Request, res: Response) => {
-    res.sendFile(path.join(distPath, "index.html"));
+    res.sendFile(indexHtmlPath, {
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    });
   });
 }
 

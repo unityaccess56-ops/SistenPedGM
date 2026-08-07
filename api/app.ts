@@ -9,7 +9,14 @@ import fs from "fs";
 import path from "path";
 import authRoutes from "./routes/auth.js";
 import clientRoutes from "./routes/clients.js";
-import { allowedOrigins, initialUsers, isProduction, startupWarnings } from "./config.js";
+import {
+  allowedOrigins,
+  DB_DRIVER,
+  initialUsers,
+  isProduction,
+  SQLITE_PATH,
+  startupWarnings,
+} from "./config.js";
 import { isDatabaseConfigured } from "./data/database.js";
 import { listUsers } from "./data/store.js";
 import { initializeStore } from "./data/store.js";
@@ -68,8 +75,10 @@ app.get("/api/health", async (_req: Request, res: Response): Promise<void> => {
     distPath,
     distExists,
     indexExists,
+    databaseDriver: DB_DRIVER,
     databaseConfigured: isDatabaseConfigured(),
     databaseUrlSet: Boolean(process.env.DATABASE_URL),
+    sqlitePath: SQLITE_PATH,
     expectedUsers: expectedEmails,
     actualUsers,
     usersError,

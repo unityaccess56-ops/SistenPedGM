@@ -7,6 +7,10 @@ services:
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
+      - key: DB_DRIVER
+        value: sqlite
+      - key: SQLITE_PATH
+        value: /opt/render/project/src/data/gisselle.sqlite
       - key: NODE_ENV
         value: production
       - key: RENDER

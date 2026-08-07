@@ -26,3 +26,9 @@ dist-ssr
 *.sln
 *.sw?
 .vite
+
+# SQLite databases
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+gisselle.sqlite*

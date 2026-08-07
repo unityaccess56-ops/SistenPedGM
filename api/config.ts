@@ -6,6 +6,17 @@ export const isDevelopment = !isProduction && !isTest;
 
 export const startupWarnings: string[] = [];
 
+export const DB_DRIVER = (() => {
+  const v = (process.env.DB_DRIVER || "").trim().toLowerCase();
+  if (v === "pg") return "pg";
+  if (v === "sqlite") return "sqlite";
+  if (process.env.DATABASE_URL?.trim()) return "pg";
+  return "sqlite";
+})();
+
+export const SQLITE_PATH =
+  process.env.SQLITE_PATH?.trim() || "gisselle.sqlite";
+
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -27,18 +38,24 @@ export const JWT_SECRET = isProduction
   ? requireEnv("JWT_SECRET")
   : getEnv("JWT_SECRET", "gisselle-dev-secret");
 
-export const DATABASE_URL = isProduction
-  ? (() => {
-      const value = process.env.DATABASE_URL?.trim();
-      if (!value) {
-        const msg = "DATABASE_URL es obligatoria en produccion";
-        startupWarnings.push(msg);
-        console.warn(`[WARN] ${msg}. Continuara sin PostgreSQL (solo memoria).`);
-        return "";
-      }
-      return value;
-    })()
-  : getEnv("DATABASE_URL");
+export const DATABASE_URL =
+  DB_DRIVER === "pg"
+    ? isProduction
+      ? (() => {
+          const value = process.env.DATABASE_URL?.trim();
+          if (!value) {
+            const msg =
+              "DATABASE_URL es obligatoria en produccion con DB_DRIVER=pg";
+            startupWarnings.push(msg);
+            console.warn(
+              `[WARN] ${msg}. Configura DATABASE_URL o cambia DB_DRIVER=sqlite.`,
+            );
+            return "";
+          }
+          return value;
+        })()
+      : getEnv("DATABASE_URL")
+    : "";
 
 export const PORT = Number(getEnv("PORT", "3001"));
 

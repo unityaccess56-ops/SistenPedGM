@@ -87,7 +87,11 @@ export async function initializeStore() {
       `
         INSERT INTO users (id, name, email, role, password_hash, active)
         VALUES ($1,$2,$3,$4,$5,TRUE)
-        ON CONFLICT (email) DO NOTHING
+        ON CONFLICT (email) DO UPDATE SET
+          name = EXCLUDED.name,
+          role = EXCLUDED.role,
+          password_hash = EXCLUDED.password_hash,
+          active = TRUE
       `,
       [user.id, user.name, user.email, user.role, user.passwordHash],
     );

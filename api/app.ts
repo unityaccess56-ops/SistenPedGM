@@ -9,7 +9,9 @@ import fs from "fs";
 import path from "path";
 import authRoutes from "./routes/auth.js";
 import clientRoutes from "./routes/clients.js";
-import { allowedOrigins, isProduction, startupWarnings } from "./config.js";
+import { allowedOrigins, initialUsers, isProduction, startupWarnings } from "./config.js";
+import { isDatabaseConfigured } from "./data/database.js";
+import { listUsers } from "./data/store.js";
 import { initializeStore } from "./data/store.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import orderRoutes from "./routes/orders.js";
@@ -44,14 +46,33 @@ const app: express.Application = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-app.get("/api/health", (_req: Request, res: Response): void => {
+app.get("/api/health", async (_req: Request, res: Response): Promise<void> => {
   void storeInitPromise;
+  const expectedEmails = initialUsers.map((u) => u.email);
+  let actualUsers: Array<{ email: string; role: string; name: string }> = [];
+  let usersError = "";
+  try {
+    actualUsers = (await listUsers()) as Array<{
+      email: string;
+      role: string;
+      name: string;
+    }>;
+  } catch (err) {
+    usersError = err instanceof Error ? err.message : String(err);
+  }
   res.status(200).json({
     success: true,
     message: "ok",
+    nodeEnv: process.env.NODE_ENV || "development",
+    port: process.env.PORT || "3001",
     distPath,
     distExists,
     indexExists,
+    databaseConfigured: isDatabaseConfigured(),
+    databaseUrlSet: Boolean(process.env.DATABASE_URL),
+    expectedUsers: expectedEmails,
+    actualUsers,
+    usersError,
     startupWarnings,
   });
 });

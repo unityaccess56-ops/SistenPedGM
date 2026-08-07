@@ -50,7 +50,7 @@ router.post(
       console.error(`[ERROR] /auth/login: ${msg}`);
       res.status(500).json({
         success: false,
-        error: "No fue posible iniciar sesion. Intenta de nuevo.",
+        error: `No fue posible iniciar sesion. Intenta de nuevo. (${msg})`,
       });
     }
   },
